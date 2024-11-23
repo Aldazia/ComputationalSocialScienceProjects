@@ -1,0 +1,55 @@
+Last login: Fri Nov 22 23:25:05 on ttys000
+(base) aldaziagreen@Aldazias-MacBook-Air ~ % cd git
+(base) aldaziagreen@Aldazias-MacBook-Air git % ls
+Aldazia.github.io
+Computational-Social-Science-Training-Program
+ComputationalSocialScienceProjects
+GitHub-Collaboration-Practice
+Python-Data-Wrangling
+git_challenges
+group_project
+my_first_repo
+(base) aldaziagreen@Aldazias-MacBook-Air git % ComputationalSocialScienceProjects
+zsh: command not found: ComputationalSocialScienceProjects
+(base) aldaziagreen@Aldazias-MacBook-Air git % cd ComputationalSocialScienceProjects
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % ls
+Project1	Project2	Project3	README.md
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % git status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	Project1/.ipynb_checkpoints/
+	Project2/Project 2 Aldazia Green .ipynb
+	Project3/
+
+nothing added to commit but untracked files present (use "git add" to track)
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % hit add Project3/
+zsh: command not found: hit
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % git add Project3/
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % git commit -m "Changes made"
+[main 1ddfa98] Changes made
+ 2 files changed, 6424 insertions(+)
+ create mode 100644 Project3/.ipynb_checkpoints/Project 3  Aldazia -checkpoint.ipynb
+ create mode 100644 Project3/Project 3  Aldazia .ipynb
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % cd Project3
+(base) aldaziagreen@Aldazias-MacBook-Air Project3 % touch Project3file.txt
+(base) aldaziagreen@Aldazias-MacBook-Air Project3 % git status 
+On branch main
+Your branch is ahead of 'origin/main' by 1 commit.
+  (use "git push" to publish your local commits)
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	../Project1/.ipynb_checkpoints/
+	../Project2/Project 2 Aldazia Green .ipynb
+	Project3file.txt
+
+nothing added to commit but untracked files present (use "git add" to track)
+(base) aldaziagreen@Aldazias-MacBook-Air Project3 % git add Project3file.txt
+(base) aldaziagreen@Aldazias-MacBook-Air Project3 % git commit -m " Changes to Project 3 file"
+[main 7d51753]  Changes to Project 3 file
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ create mode 100644 Project3/Project3file.txt
+(base) aldaziagreen@Aldazias-MacBook-Air Project3 % nano Project3file.txt
