@@ -1,0 +1,29 @@
+Editing File 
+The following are the commands 
+aldaziagreen@Aldazias-MacBook-Air ~ % cd git
+(base) aldaziagreen@Aldazias-MacBook-Air git % git clone https://github.com/Aldazia/ComputationalSocialScienceProjects.git
+Cloning into 'ComputationalSocialScienceProjects'...
+remote: Enumerating objects: 3, done.
+remote: Counting objects: 100% (3/3), done.
+remote: Total 3 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+Receiving objects: 100% (3/3), done.
+(base) aldaziagreen@Aldazias-MacBook-Air git % ls 
+Computational-Social-Science-Training-Program
+ComputationalSocialScienceProjects
+git_challenges
+group_project
+my_first_repo
+(base) aldaziagreen@Aldazias-MacBook-Air git % cd ComputationalSocialScienceProjects
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % mkdir Project1
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % ls
+Project1	README.md
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % cdProject1
+zsh: command not found: cdProject1
+(base) aldaziagreen@Aldazias-MacBook-Air ComputationalSocialScienceProjects % cd Project1
+(base) aldaziagreen@Aldazias-MacBook-Air Project1 % touch Project1file.txt
+(base) aldaziagreen@Aldazias-MacBook-Air Project1 % nano Project1file.txt
+                                                    git status
+                                                    git add Project1file.txt
+                                                    git commit - "changes"
+                                                    git push
+
