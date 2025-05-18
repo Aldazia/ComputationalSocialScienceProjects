@@ -1,0 +1,390 @@
+```{r}
+# Add to this package list for additional SL algorithms
+pacman::p_load(
+  tidyverse,
+  ggthemes,
+  ltmle,
+  tmle,
+  SuperLearner,
+  tidymodels,
+  caret,
+  dagitty,
+  ggdag,
+  rpart,
+  furrr,       # parallel processing
+  parallel,
+  dplyr,
+  here)
+```
+```{r}
+# set seed
+set.seed(44)
+
+knitr::opts_knit$set(root.dir = "/Users/aldaziagreen/Downloads/Causal Inference")
+setwd("/Users/aldaziagreen/Downloads/Causal Inference")
+# load data
+heart_disease <- read_csv('../data/heart_disease_tmle.csv')
+```
+```{r}
+heart_data <- heart_disease %>%
+  select(-bmi_2,-chol_2 ,-blood_pressure_2,-blood_pressure_medication_2)  
+```
+
+```{r}
+listWrappers()
+```
+## Part 3 Superlearner 
+## 3.1 Fit SuperLearner Model. Selection of 5 algorithms 
+```{r}
+sl_lib <- c("SL.glm","SL.glmnet","SL.mean","SL.bayesglm","SL.rpart")
+```
+## Train/Test split
+```{r}
+# initial split
+# ----------
+heart_split <- 
+  initial_split(heart_data, prop = 3/4) # create initial split (tidymodels)
+
+
+# Training 
+# ----------
+train <- 
+  # Declare the training set with rsample::training()
+  training(heart_split)
+
+# y_train 
+y_train <- 
+  train %>% 
+  # pull and save as vector
+  pull(mortality)    
+
+# x_train  
+x_train <-
+  train %>%
+  # drop the target variable
+  select(-mortality)   
+
+```
+```{r}
+# Testing 
+# ----------
+test <-  
+  # Declare the training set with rsample::training()
+  testing(heart_split)
+
+# y test
+y_test <- 
+  test %>%
+ # pull and save as vector
+  pull(mortality)    
+
+# x test
+x_test <- 
+  test %>%
+   select(-mortality) 
+```
+```{r}
+#library(arm)
+```
+## Train SuperLearner
+```{r}
+# set seed
+set.seed(12345)
+
+# LASSO 
+# ----------
+sl_lasso <- SuperLearner(Y = y_train,              # target
+                         X = x_train,              # features
+                         family = binomial(),      # binomial : 1,0s
+                         SL.library = "SL.glmnet") # find the glmnet algo from SL
+
+# view
+sl_lasso
+```
+## Using lasso regression the risk estimate is approx. 0.23 
+## Risk and Coefficient of each model
+```{r}
+# multiple models  
+# ----------
+# set seed
+set.seed(12345)
+sl = SuperLearner(Y = y_train,
+                  X = x_train,
+                  family = binomial(),
+                  # notice these models are concatenated
+                  SL.library = sl_lib)
+sl
+```
+## Implementing these 5 algorithms, we see that Risk and Coef results indicate that the Decision tree (rpart) performed the best individually as indicated by the low risk/RMSE value of approx. 0.231. In addition the rpart algorithm also contributed the most to the Superlearner ensemeble ( coef = 0.77). The second best model include the bayes logistic regression ( glm) which had a similar risk/RMSe value of approx 0.235 and contributed about 0.23 to the ensemble performance. Interestingly the risk appear to be the sane across all algorithms. Other algoirthms such as SL.mean,SL.glmnet,SL.glm have coeficients of 0, which can suggest that they do not capture anything unique that is not already being captured by the bayes logistic regression or the decision tree. 
+## Discrete winner and superlearner ensemble performance
+```{r}
+# Obtain the risk of the best model (discrete SuperLearner winner)
+best_model_risk <- sl$cvRisk[which.min(sl$cvRisk)]
+
+# Print the risk of the best model
+print(best_model_risk)
+
+```
+## Using this code we can clearly indicate which algorithm was the discrete winner, once again the Decision tree rpart had the lowest predictive error when estimating the probability of somone dying from complications from heart disease.
+```{r}
+ # predictions
+# ----------
+set.seed(12345)
+preds <- 
+  predict(sl,             # use the superlearner not individual models
+          x_test,         # prediction on test set
+          onlySL = TRUE)  # use only models that were found to be useful (had weights)
+
+
+# start with y_test
+validation <- 
+  y_test %>%
+  # add our predictions - first column of predictions
+  bind_cols(preds$pred[,1]) %>% 
+  # rename columns
+  rename(obs = `...1`,      # actual observations 
+         pred = `...2`) %>% # predicted prob
+  # change pred column so that obs above .5 are 1, otherwise 0
+  mutate(pred = ifelse(pred >= .5, 
+                           1,
+                           0))
+
+# view
+head(validation)
+```
+## Confusion Matrix
+```{r}
+# Confusion Matrix
+# ----------
+caret::confusionMatrix(as.factor(validation$pred),
+                       as.factor(validation$obs))
+
+```
+# Confusion Matrix results indicate that this Superlearner ensemble was about 57% accurate in it's predictions.Sensitivity refers to the true positive rate/recall, which in this ensemble is approx. 21%. We see this in more detail in which 1161 of the positive cases were predicted as true positives ( i.e accurately predicted they were more likely to die from heart disease) The specificity is the true negative rate, in which 92% of those that were not likely to die due to heart disease were accuractely identified as true negatives. More specifically, 266 cases were identified as TN. Precision relates to the positive prediction value, which was estimated to be 0.73. This means 73% of all predicted positive cases were actually positive. 
+```{r}
+# identify number of cores to use
+library(future)
+n_cores <- availableCores() - 1 # I have 8 cores and it reduced to 7 
+
+# plan separate session 
+  plan(multisession, 
+     workers = n_cores) 
+
+# set seed - option will set same seed across multiple cores
+set.seed(44, "L'Ecuyer-CMRG")
+
+# cross-validation across cores
+# ----------
+cv_sl = CV.SuperLearner(Y = y_train, 
+                        X = x_train, 
+                        family = binomial(),      #
+                        V = 20,                   # default fold recommendation for Superlearner 
+                        SL.library = c("SL.glm","SL.glmnet","SL.mean","SL.bayesglm","SL.rpart"))
+
+# plot
+plot(cv_sl)
+```
+```{r}
+summary(cv_sl)
+```
+## The plot and summary results indicate that the rpart, superlearner, and discrete algorithm works similar to one another as you compare accuracy and CV risk estimates. The accuracy for those specified algorithms are approx. 0.228. However, the superlearner had a slightly  lower standard error ( 0.001276) compared the rpart and discrete SL SE (0.001305)
+## Discussion Question 3.2
+# Superlearner ensembles are more reliable compared to a single discrete winner due to it's ability to capture the complexities of both train and test datasets. As seen above, an ensemble is able to extract the most optimal weight from each algorithm that best can be used to predict the data. While the decision tree algorithm was the best, we should consider how much the other algorithms contributed to the performance. For instance, the bayes logistic  regression contributed to 23%  to the superlearn ensemble performance with an rmse similar to the discrete winner. Using a single best model in cross-validation, may risk increasing error when applying the model to new and unfamilar data by leaving out the best parts of the bayes that contribute to the ensemble. 
+## Part 4 TMLE 
+```{r}
+df <- heart_data %>% 
+  mutate(Y = heart_data$mortality) %>% 
+  rename(A = blood_pressure_medication) %>% 
+select(Y, A, sex_at_birth, age, simplified_race, college_educ, income_thousands, bmi,chol,blood_pressure)
+```
+
+```{r}
+
+pacman::p_load(# Tidyverse packages including dplyr and ggplot2 
+               tidyverse,
+               ggthemes,
+               konfound,
+               dagitty,
+               ggdag,
+               sensitivitymv,
+               EValue)  
+
+# set dag theme
+# ----------
+theme_set(theme_dag())
+# set seed
+# ----------
+set.seed(13)
+```
+
+## 4.1 Causal Diagram 
+```{r}
+# Create a DAG using dagify
+# ----------
+dag_tmle <- dagify( 
+      Y ~ A + sex_at_birth + age + simplified_race + college_educ + income_thousands + bmi + chol + blood_pressure,
+       A ~ sex_at_birth + age + simplified_race + college_educ + income_thousands + bmi + chol + blood_pressure,
+       exposure = "A",
+       outcome = "Y"
+      ) 
+  ggdag(dag_tmle, layout = "tree") +
+  geom_dag_edges() +
+  geom_dag_node(size = 20) +
+  geom_dag_text(color = "white", size = 2) +
+  theme(legend.position = "none")
+```
+# The DAG above shows the relationship between the treatment (A = blood pressure medication) and the covariates that predict treatment selection. In addition, the DAG shows the relationship between mortality (Y) given the treatment chosen and covariates included in our dataset. Together, we are able to see both the outcome model and propensity to tremodel in one DAG. 
+## 4.2 TMLE Estimation 
+## Create SL Library of 5 algorithms 
+```{r}
+sl_lib <- c("SL.glm","SL.glmnet","SL.mean","SL.bayesglm","SL.rpart")
+```
+```{r}
+df <- heart_data %>% 
+  mutate(Y = heart_data$mortality) %>% 
+  rename(A = blood_pressure_medication) %>% 
+select(Y, A, sex_at_birth, age, simplified_race, college_educ, income_thousands, bmi,chol,blood_pressure)
+# Treatment 
+# ----------
+A <- 
+ df %>% 
+  pull(A)
+# Outcome
+# ----------
+Y <- 
+ df %>% 
+  pull(Y) 
+
+# Covariates
+# ----------
+W <- 
+  df %>% 
+  select(-Y,-A) 
+```
+
+```{r}
+# set seed for reproducibility
+set.seed(1000)
+
+# implement above all in one step using tmle
+# ----------
+tmle_fit <- 
+  tmle::tmle(Y = Y,                  # outcome
+             A = A,                  # treatment
+             W = W , 
+             # baseline covariates
+             Q.SL.library = sl_lib, # libraries for initial estimate 
+             g.SL.library = sl_lib) # libraries for prob to be in treatment
+
+# view results 
+tmle_fit
+```
+## The ATE using the TMLE package is estimated to be -0.36. This means compared to the untreated group, the treated group seen a reduction in 36 percentange points in mortality rates. P value and Confidence Interval suggest this is a statistically significant difference. 
+## 4.3 Discussion Question 
+# A double robust estimator helps eliminate model misspecification bias, by ensuring that the analysis still works even if one of the outcome or propensity models is still correct. TMLE is able to address missing outcomes and is more efficient by establishing the smallest possible asymptomic variance of any possible estimator. TMLE also does not rely on parametric assumptions, and in some ways can be consider semiparametric. By only relying on no unobserved confounding & positivity asumptions, TMLE is able to provide two chances of having the correct outcome or propensity model to address confounding. 
+```{r}
+data_obs_ltmle <-
+ heart_disease %>%
+  mutate(Y = heart_disease$mortality,
+         A_2 = heart_disease$blood_pressure_medication_2) %>% 
+  rename(A = blood_pressure_medication) 
+```
+
+```{r}
+# Create a DAG using dagify
+# ----------
+dag_ltmle <- dagify( 
+      Y ~ A + A_2 + sex_at_birth + age + simplified_race + college_educ + income_thousands + bmi + chol + blood_pressure +  bmi_2 +            chol_2 + blood_pressure_2 ,
+       A ~ sex_at_birth + age + simplified_race + college_educ + income_thousands + bmi + chol + blood_pressure,
+        A_2 ~ A + sex_at_birth + age + simplified_race + college_educ + income_thousands + bmi_2 + chol_2 + blood_pressure_2,
+      bmi_2 ~ A + sex_at_birth + age + simplified_race + college_educ + income_thousands + bmi + chol + blood_pressure,
+       chol_2 ~ A + sex_at_birth + age + simplified_race + college_educ + income_thousands + bmi + chol + blood_pressure,
+      blood_pressure_2 ~ A + sex_at_birth + age + simplified_race + college_educ + income_thousands + bmi + chol +blood_pressure,
+     exposure = "A_2",
+       outcome = "Y"
+      ) 
+ ggdag(dag_ltmle, layout = "sugiyama") +
+  geom_dag_edges_link() +
+  geom_dag_node(size = 19.5, color = "navyblue") +
+  geom_dag_text(color = "white", size = 1.5) +
+  theme_void()
+```
+## In this DAG we can see the temporal order of variables collected at different time points. This DAG shows how the Baseline covariates impact A ( treatment selected at time point 1) and Y ( mortality). The BMI, Cholestrol, and Blood pressure collected at time point 2 are impacted by the Baseline Covarites as well as the treatment selected at time point 1. The treatment selected at time point 2 (A_2), is influenced by prior treatment at time period 1 (A), baseline covariates, bmi_2, chol_2, blood_pressure_2. Lastly, when using longitudal TMLE we see that our Y (mortality) predictions are influenced by all these time varying confounders, baseline, treatment selection at both time periods. Temporal order can be shown with W1,W2, W3,W4, W5, W6, W7, W8, A, W9, W10, W11, A_2, Y with W's indicating the different covariates measured
+```{r}
+# process data
+# ----------
+data_obs_ltmle <-
+ heart_disease %>%
+  mutate(Y = heart_disease$mortality) %>% 
+  rename(A = blood_pressure_medication) %>% 
+  # need to specify W1, W2, etc 
+  rename ( W1 = bmi, W2 = chol, W3 = blood_pressure, W4 = sex_at_birth, W5 = age, W6 = simplified_race, W7 = college_educ, W8 = income_thousands) %>%
+  select(W1, W2, W3,W4, W5, W6, W7, W8, A, Y)
+```
+
+
+```{r}
+# implement ltmle  Naive Model. Without Sl. Library and without Lnodes (timevarying covariates)
+# ----------
+set.seed(1000)
+result <- ltmle(data_obs_ltmle, # dataset
+                Anodes = "A",   # vector that shows treatment
+                Ynodes = "Y",   # vector that shows outcome
+                abar = list(1,0))
+# view
+summary(result)
+```
+## According to these results,the control group ( i.e those that did not take blood pressure medication) is approx. 56.6% mortality rate while the treated group had a 20% mortatility rate. The additive treatment effect(ATE) shows an reduction in mortality rate of 36.2% percentage points if one was in the treated group compared to untreated group (i.e control). The Pvalue and CI show that this was a statistically significant reduction in mortality rate outcomes for those that actally took the blood presure medication. However this is a naive model not addressing the time varying confounders.  
+
+```{r}
+# process data
+# ----------
+data_obs_ltmle <-
+ heart_disease %>%
+  mutate(Y = heart_disease$mortality) %>% 
+  rename(A = blood_pressure_medication, 
+         A_2 = blood_pressure_medication_2 ,
+         W1 = bmi, W2 = chol, W3 = blood_pressure, 
+         W4 = sex_at_birth, W5 = age, W6 = simplified_race, W7 = college_educ, W8 = income_thousands, 
+         W9 = bmi_2, W10 = chol_2, W11 = blood_pressure_2) %>% ## time varying covaraites 
+  select(W1, W2, W3,W4, W5, W6, W7, W8, A, W9, W10, W11, A_2, Y)
+```
+
+```{r}
+# identify number of cores to use
+library(future)
+n_cores <- availableCores() - 1 # maybe 2 cores instead?
+
+# plan separate session 
+  plan(multisession, 
+     workers = n_cores) 
+
+# set seed - option will set same seed across multiple cores
+set.seed(44, "L'Ecuyer-CMRG")
+
+# cross-validation across cores
+# ----------
+cv_sl = CV.SuperLearner(Y = y_train, 
+                        X = x_train, 
+                        family = binomial(),      #
+                        V = 20,                   # default fold recommendation for Superlearner 
+                        SL.library = c("SL.glm","SL.glmnet","SL.mean","SL.bayesglm","SL.rpart"))
+
+summary(cv_sl)
+```
+
+```{r}
+# implement ltmle Treatment effect of treated
+# ----------
+set.seed(1000)
+results_2 <-ltmle(data_obs_ltmle, 
+      Anodes=c("A", "A_2"),## treatment indicator in Anodes vector. E[Y| A=1 , A_2=1]
+     Lnodes= c("W9","W10", "W11"),            
+      Ynodes="Y",            # outcome
+      abar = list(treated = c(1,1), control = c(0,0)),  # treatment indicator in Anodes vector. E[Y| A=1 , A_2=1]
+      SL.library = c("SL.glm","SL.mean","SL.bayesglm","SL.rpart"))
+summary(results_2)
+```
+## According to these results,the control group ( i.e those that did not take blood pressure medication) is approx. 56.7% mortality rate while the treated group had a 19.8% mortatility rate. The additive treatment effect(ATE) shows an reduction in mortality rate of 36.9% percentage points if one was in the treated group compared to untreated group (i.e control). The Pvalue and CI show that this was a statistically significant reduction in mortality rate outcomes for those that actally took the blood presure medication. While the NAIVE model results are somewhat similar, this output is different because accurately addresses the time varying confounders and both the treatments provided at time point 1 and 2. Differences seen in estimates are minimal 
+## 5.3 Discussion questions 
+# Time dependent confounding variables we should be worried about in include changing bmi, blood pressure, and cholestrol. We worry about these type of time varying confounders because they are impacted by prior treatment in time point 1 (A) and baseline covariates ( W1-W8). These type of variables also impact future treatment selection(A-2) and predicted outcomes (Y). This is different than a time varying running variable such as age, because while age does change throughout time impacting the overall outcome (Y) and baseline variables (W1-8) it is not technically impacted by treatment at Time 1 (A). Treatment does not determine what your age, this variables naturally increases with time.  
